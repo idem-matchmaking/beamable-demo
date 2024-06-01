@@ -1,0 +1,12 @@
+﻿.idea
+Library
+Temp
+UserSettings
+obj
+Logs
+Assets/Beamable/Resources/config-defaults.txt
+Assets/Beamable/Resources/config-defaults.txt.meta
+Assembly-CSharp.csproj
+Beamable.Microservice.Idem.csproj
+demo-beamable.sln
+Unity.Beamable.Customer.MicroserviceClients.csproj
