@@ -1,6 +1,7 @@
 ﻿using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Beamable.Microservices.Idem.Shared;
 using UnityEngine;
 
 namespace Beamable.Microservices.Idem.Tools
@@ -43,7 +44,7 @@ namespace Beamable.Microservices.Idem.Tools
                 AuthFlow = "USER_PASSWORD_AUTH",
                 ClientId = clientId
             };
-            var json = CompactJson.Serializer.ToString(authPayload, false);
+            var json = authPayload.ToJson();
 
             if (debug)
                 Debug.Log($"[DEBUG] Auth Message: {json}");
@@ -68,7 +69,7 @@ namespace Beamable.Microservices.Idem.Tools
 
             client.DefaultRequestHeaders.Add(header.key, header.val);
 
-            var json = CompactJson.Serializer.ToString(param, false);
+            var json = param.ToJson();
             var content = new StringContent(json, Encoding.UTF8, contentType);
 
             if (debug)
@@ -81,7 +82,7 @@ namespace Beamable.Microservices.Idem.Tools
             
             var responseString = await response.Content.ReadAsStringAsync();
 
-            return CompactJson.Serializer.Parse<T>(responseString);
+            return JsonUtil.Parse<T>(responseString);
         }
     }
 }

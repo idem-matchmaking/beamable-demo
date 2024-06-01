@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using Beamable.Microservices.Idem.Shared;
+using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 
 namespace Beamable.Microservices.Idem.IdemLogic
 {
@@ -12,14 +14,14 @@ namespace Beamable.Microservices.Idem.IdemLogic
         public static BaseIdemMessage ParseByAction(BaseIdemMessage header, string fullJson)
             => header?.action switch
             {
-                "addPlayerResponse" => CompactJson.Serializer.Parse<AddPlayerResponseMessage>(fullJson),
-                "removePlayerResponse" => CompactJson.Serializer.Parse<RemovePlayerResponseMessage>(fullJson),
-                "getPlayersResponse" => CompactJson.Serializer.Parse<GetPlayersResponseMessage>(fullJson),
-                "getMatchesResponse" => CompactJson.Serializer.Parse<GetMatchesResponseMessage>(fullJson),
-                "updateMatchConfirmedResponse" => CompactJson.Serializer.Parse<ConfirmMatchResponseMessage>(fullJson),
-                "updateMatchFailedResponse" => CompactJson.Serializer.Parse<FailMatchResponseMessage>(fullJson),
-                "updateMatchCompletedResponse" => CompactJson.Serializer.Parse<CompleteMatchResponseMessage>(fullJson),
-                "matchSuggestion" => CompactJson.Serializer.Parse<MatchSuggestionMessage>(fullJson),
+                "addPlayerResponse" => JsonUtil.Parse<AddPlayerResponseMessage>(fullJson),
+                "removePlayerResponse" => JsonUtil.Parse<RemovePlayerResponseMessage>(fullJson),
+                "getPlayersResponse" => JsonUtil.Parse<GetPlayersResponseMessage>(fullJson),
+                "getMatchesResponse" => JsonUtil.Parse<GetMatchesResponseMessage>(fullJson),
+                "updateMatchConfirmedResponse" => JsonUtil.Parse<ConfirmMatchResponseMessage>(fullJson),
+                "updateMatchFailedResponse" => JsonUtil.Parse<FailMatchResponseMessage>(fullJson),
+                "updateMatchCompletedResponse" => JsonUtil.Parse<CompleteMatchResponseMessage>(fullJson),
+                "matchSuggestion" => JsonUtil.Parse<MatchSuggestionMessage>(fullJson),
                 "keepAlive" => header,
                 _ => null
             };
@@ -117,6 +119,14 @@ namespace Beamable.Microservices.Idem.IdemLogic
         {
             action = "getMatches";
         }
+        
+        public GetMatchesMessage(string gameId) : this()
+        {
+            payload = new GameIdPayload
+            {
+                gameId = gameId
+            };
+        }
     }
     
     public class GetMatchesResponseMessage : BaseIdemMessage
@@ -131,6 +141,15 @@ namespace Beamable.Microservices.Idem.IdemLogic
         public ConfirmMatchMessage()
         {
             action = "updateMatchConfirmed";
+        }
+
+        public ConfirmMatchMessage(string gameId, string matchId) : this()
+        {
+            payload = new MatchIdPayload
+            {
+                gameId = gameId,
+                matchId = matchId
+            };
         }
     }
     
@@ -172,6 +191,26 @@ namespace Beamable.Microservices.Idem.IdemLogic
         public CompleteMatchMessage()
         {
             action = "updateMatchCompleted";
+        }
+
+        public CompleteMatchMessage(IdemMatchResult result) : this()
+        {
+            payload = new CompleteMatchPayload
+            {
+                gameId = result.gameId,
+                matchId = result.matchId,
+                server = result.server,
+                gameLength = result.gameLength,
+                teams = result.teams.Select(t => new TeamResult
+                {
+                    rank = t.rank,
+                    players = t.players.Select(p => new PlayerResult
+                    {
+                        playerId = p.playerId,
+                        score = p.score
+                    }).ToArray()
+                }).ToArray()
+            };
         }
     }
 

@@ -2,14 +2,19 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Beamable.Microservices.Idem.Tools;
-using Beamable.Microservices.MicroserviceSchemas;
+using Beamable.Microservices.Idem.Shared;
+using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 using UnityEngine;
 
 namespace Beamable.Microservices.Idem.IdemLogic
 {
     public class IdemLogic
     {
+	    // TODO_IDEM
+	    // - player timeouts
+	    //  - player timeout to the configs
+	    //  - on timeout remove from queue if waiting
+	    //  - on timeout fail match if already matched with requeue for everybody else
 	    
         private readonly bool debug;
         private readonly Dictionary<string, GameModeContainer> gameModes = new ();
@@ -53,6 +58,19 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        var response = await awaiter.Task;
 	        return new StringResponse(response.ToJson());
         }
+        
+        public async Task<BaseResponse> GetMatches(string gameId)
+        {
+			var awaiter = new TaskCompletionSource<BaseIdemMessage>();
+	        AddAwaiter<GetMatchesResponseMessage>(awaiter);
+	        
+	        var result = sendToIdem(new GetMatchesMessage(gameId));
+	        if (!result)
+		        return BaseResponse.IdemConnectionFailure;
+	        
+	        var response = await awaiter.Task;
+	        return new StringResponse(response.ToJson());
+        }
 
         public BaseResponse StartMatchmaking(string playerId, string gameMode, string[] servers)
         {
@@ -80,8 +98,8 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			        success = success && sendToIdem(new RemovePlayerMessage(gameId, playerId));
 
 		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var match))
-			        success = success && sendToIdem(new FailMatchMessage(gameId, match.uuid, playerId,
-				        match.teams.SelectMany(t => t.players).Select(p => p.playerId)));
+			        success = success && sendToIdem(new FailMatchMessage(gameId, match.matchId, playerId,
+				        match.players.Select(p => p.playerId)));
 	        }
 
 	        return success ? BaseResponse.Success : BaseResponse.IdemConnectionFailure;
@@ -95,17 +113,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			        return MMStateResponse.InQueue(gameId);
 
 		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var match))
-		        {
-			        var players = new List<MMStateResponse.Player>();
-			        for (int i = 0; i < match.teams.Length; i++)
-			        {
-				        foreach (var p in match.teams[i].players)
-				        {
-					        players.Add(new MMStateResponse.Player(i, p.playerId));
-				        }
-			        }
-			        return MMStateResponse.MatchFound(gameId, match.uuid, players);
-		        }
+			        return MMStateResponse.MatchFound(gameId, match.matchId, match.players);
 	        }
 	        
 	        return MMStateResponse.None();
@@ -113,12 +121,26 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         public BaseResponse ConfirmMatch(string playerId, string matchId)
         {
-	        throw new System.NotImplementedException();
+	        var match = FindMatch(playerId, matchId);
+	        if (match == null)
+		        return BaseResponse.UnknownMatchFailure;
+
+	        match.ConfirmBy(playerId);
+	        if (match.ConfirmedByAll && sendToIdem(new ConfirmMatchMessage(match.gameId, match.matchId)))
+				return ConfirmMatchResponse.MatchConfirmed;
+
+	        return ConfirmMatchResponse.MatchNotConfirmed;
         }
 
-        public BaseResponse CompleteMatch(string matchId)
+        public BaseResponse CompleteMatch(string playerId, string matchId, IdemMatchResult result)
         {
-	        throw new System.NotImplementedException();
+	        var match = FindMatch(playerId, matchId);
+	        if (match == null)
+		        return BaseResponse.UnknownMatchFailure;
+
+	        return sendToIdem(new CompleteMatchMessage(result))
+		        ? BaseResponse.Success
+		        : BaseResponse.IdemConnectionFailure;
         }
 
         public void HandleIdemMessage(string message)
@@ -126,7 +148,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
             if (debug)
                 Debug.Log($"Got message from Idem: {message}");
             
-            var baseMessage = CompactJson.Serializer.Parse<BaseIdemMessage>(message);
+            var baseMessage = JsonUtil.Parse<BaseIdemMessage>(message);
             var fullMessage = BaseIdemMessage.ParseByAction(baseMessage, message);
 
             if (fullMessage.error != null)
@@ -170,6 +192,25 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         private GameModeContainer GetGameMode(string gameMode) => gameModes.GetValueOrDefault(gameMode);
 
+        private CachedMatch FindMatch(string playerId, string matchId)
+        {
+	        var allMatches =
+		        gameModes.Values.SelectMany(g => g.pendingMatches.Values)
+			        .Concat(
+				        gameModes.Values.SelectMany(g => g.activeMatches.Values)
+			        );
+	        
+	        return allMatches.FirstOrDefault(match =>
+		        match.matchId == matchId && match.players.Any(p => p.playerId == playerId)
+	        );
+        }
+
+        private void HandleMatchSuggestion(string payloadGameId, Match match)
+        {
+	        // TODO_IDEM
+	        throw new NotImplementedException();
+        }
+
         private void OnAddPlayerResponse(AddPlayerResponseMessage addPlayerResponse)
         {
 	        var gameContainer = GetGameMode(addPlayerResponse.payload.gameId);
@@ -209,6 +250,14 @@ namespace Beamable.Microservices.Idem.IdemLogic
         private void OnGetMatchesResponse(GetMatchesResponseMessage getMatchesResponse)
         {
 	        SignalAwaiters(getMatchesResponse);
+	        
+	        if (getMatchesResponse?.payload?.matches == null)
+		        return;
+	        
+	        foreach (var match in getMatchesResponse.payload.matches)
+	        {
+		        HandleMatchSuggestion(getMatchesResponse.payload.gameId, match);
+	        }
         }
 
         private void OnConfirmMatchResponse(ConfirmMatchResponseMessage confirmMatchResponse)
@@ -229,6 +278,11 @@ namespace Beamable.Microservices.Idem.IdemLogic
         private void OnMatchSuggestion(MatchSuggestionMessage matchSuggestion)
         {
 	        SignalAwaiters(matchSuggestion);
+
+	        if (matchSuggestion?.payload?.match == null)
+		        return;
+	        
+	        HandleMatchSuggestion(matchSuggestion.payload.gameId, matchSuggestion.payload.match);
         }
         
         private void AddAwaiter<T>(TaskCompletionSource<BaseIdemMessage> awaiter) where T : BaseIdemMessage

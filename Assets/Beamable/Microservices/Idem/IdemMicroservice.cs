@@ -2,8 +2,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Beamable.Microservices.Idem.IdemLogic;
+using Beamable.Microservices.Idem.Shared;
+using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 using Beamable.Microservices.Idem.Tools;
-using Beamable.Microservices.MicroserviceSchemas;
 using Beamable.Server;
 using UnityEngine;
 using WebSocketSharp;
@@ -11,7 +12,7 @@ using WebSocketSharp;
 namespace Beamable.Microservices
 {
     [Microservice("Idem")]
-    public class IdemMicroservice : Microservice
+    public partial class IdemMicroservice : Microservice
     {
         // microsservice config keys
         private const string ConfigNamespace = "Idem";
@@ -39,6 +40,17 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.GetPlayers(gameId);
+            return result.ToJson();
+        }
+
+        [AdminOnlyCallable]
+        public async Task<string> AdminGetMatches(string gameId)
+        {
+            var connectionError = await CheckConnection();
+            if (connectionError != null)
+                return connectionError;
+
+            var result = logic.GetMatches(gameId);
             return result.ToJson();
         }
         
@@ -87,13 +99,15 @@ namespace Beamable.Microservices
         }
         
         [ClientCallable]
-        public async Task<string> CompleteMatch(string matchId) // TODO arguments
+        public async Task<string> CompleteMatch(string matchId, string payload)
         {
             var connectionError = await CheckConnection();
             if (connectionError != null)
                 return connectionError;
 
-            var result = logic.CompleteMatch(matchId);
+            var matchResult = JsonUtil.Parse<IdemMatchResult>(payload);
+
+            var result = logic.CompleteMatch(playerId, matchId, matchResult);
             return result.ToJson();
         }
 
@@ -151,7 +165,7 @@ namespace Beamable.Microservices
                 return;
             }
             
-            // TODO implement multiple game modes in the push mode
+            // TODO_IDEM implement multiple game modes in the push mode
             var pushParams = $"receiveMatches=true&gameMode={gameModes[0]}&";
             var connectionUrl = $"wss://ws-int.idem.gg/?{pushParams}authorization={token}";
             Debug.Log($"Starting Idem connection to: {connectionUrl}");
