@@ -21,6 +21,7 @@ namespace Beamable.Microservices
         private const string IdemClientIdConfigKey = "ClientId";
         private const string DebugConfigKey = "Debug";
         private const string SupportedGameModesConfigKey = "SupportedGameModes";
+        private const string PlayerTimoutMsConfigKey = "PlayerTimeoutMs";
         
         // microservice state
         private static bool debug = false;
@@ -51,6 +52,17 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.GetMatches(gameId);
+            return result.ToJson();
+        }
+
+        [AdminOnlyCallable]
+        public async Task<string> AdminGetRecentPlayer(string anyPlayerId)
+        {
+            var connectionError = await CheckConnection();
+            if (connectionError != null)
+                return connectionError;
+
+            var result = logic.GetRecentPlayer(anyPlayerId);
             return result.ToJson();
         }
         
@@ -165,14 +177,22 @@ namespace Beamable.Microservices
                 return;
             }
             
+            var playerTimeoutMsStr = config.GetSetting(ConfigNamespace, PlayerTimoutMsConfigKey);
+            if (!int.TryParse(playerTimeoutMsStr, out var playerTimeoutMs))
+            {
+                const int defaultPlayerTimeoutMs = 5000;
+                Debug.LogWarning($"Could not parse player timeout ms: '{playerTimeoutMsStr}', using default {defaultPlayerTimeoutMs}");
+                playerTimeoutMs = defaultPlayerTimeoutMs;
+            }
+            
+            logic ??= new(debug, playerTimeoutMs, SendThroughWs);
+            logic.UpdateSupportedGameModes(gameModes);
+            
             // TODO_IDEM implement multiple game modes in the push mode
             var pushParams = $"receiveMatches=true&gameMode={gameModes[0]}&";
             var connectionUrl = $"wss://ws-int.idem.gg/?{pushParams}authorization={token}";
             Debug.Log($"Starting Idem connection to: {connectionUrl}");
 
-            logic ??= new(debug, SendThroughWs);
-            logic.UpdateSupportedGameModes(gameModes);
-            
             ws = new WebSocket(connectionUrl);
             ws.OnOpen += (sender, param) =>
             {

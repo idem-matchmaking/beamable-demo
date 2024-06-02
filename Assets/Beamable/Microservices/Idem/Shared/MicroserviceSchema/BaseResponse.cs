@@ -11,6 +11,7 @@ namespace Beamable.Microservices.Idem.Shared.MicroserviceSchema
         public static readonly BaseResponse IdemConnectionFailure = new(false, "No connection to Idem");
         public static readonly BaseResponse InternalErrorFailure = new(false, "Internal error");
         public static readonly BaseResponse UnknownMatchFailure = new(false, "Unknown match");
+        public static readonly BaseResponse UnknownPlayerFailure = new(false, "Unknown player");
 
         public readonly bool success;
         public readonly string error;

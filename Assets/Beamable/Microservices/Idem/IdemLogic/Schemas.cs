@@ -177,6 +177,17 @@ namespace Beamable.Microservices.Idem.IdemLogic
                 requeue = allPlayers.Where(p => p != failedPlayerId).ToArray()
             };
         }
+        
+        public FailMatchMessage(string gameId, string matchId, string[] removePlayers, string[] requeuePlayers) : this()
+        {
+            payload = new FailMatchPayload
+            {
+                gameId = gameId,
+                matchId = matchId,
+                remove = removePlayers,
+                requeue = requeuePlayers
+            };
+        }
     }
     
     public class FailMatchResponseMessage : BaseIdemMessage

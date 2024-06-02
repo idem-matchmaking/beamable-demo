@@ -2,29 +2,35 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Timers;
 using Beamable.Microservices.Idem.Shared;
 using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 using UnityEngine;
+using Object = System.Object;
 
 namespace Beamable.Microservices.Idem.IdemLogic
 {
     public class IdemLogic
     {
-	    // TODO_IDEM
-	    // - player timeouts
-	    //  - player timeout to the configs
-	    //  - on timeout remove from queue if waiting
-	    //  - on timeout fail match if already matched with requeue for everybody else
+	    private const int MaxRecentPlayers = 1000;
 	    
         private readonly bool debug;
+        private readonly TimeSpan playerTimeoutMs;
         private readonly Dictionary<string, GameModeContainer> gameModes = new ();
         private readonly Func<object, bool> sendToIdem;
         private readonly Dictionary<Type, List<TaskCompletionSource<BaseIdemMessage>>> incomingAwaiters = new ();
+        private readonly Queue<PlayerFullStats> recentPlayers = new ();
+        private readonly Timer secondsTimer = new(1000);
 
-        public IdemLogic(bool debug, Func<object, bool> sendToIdem)
+        public IdemLogic(bool debug, int playerTimeoutMs, Func<object, bool> sendToIdem)
         {
             this.debug = debug;
+            this.playerTimeoutMs = TimeSpan.FromMilliseconds(playerTimeoutMs);
             this.sendToIdem = sendToIdem;
+
+            secondsTimer.Elapsed += OnEverySecond;
+            secondsTimer.AutoReset = true;
+            secondsTimer.Enabled = true;
         }
         
         public void UpdateSupportedGameModes(IEnumerable<string> gameModesUpdate)
@@ -72,6 +78,15 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        return new StringResponse(response.ToJson());
         }
 
+        public BaseResponse GetRecentPlayer(string playerId)
+        {
+	        foreach (var p in recentPlayers)
+		        if (p.playerId == playerId)
+					return new StringResponse(p.ToJson());
+	        
+	        return BaseResponse.UnknownPlayerFailure;
+        }
+
         public BaseResponse StartMatchmaking(string playerId, string gameMode, string[] servers)
         {
 	        if (playerId == null)
@@ -94,7 +109,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        var success = true;
 	        foreach (var (gameId, gameContainer) in gameModes)
 	        {
-		        if (gameContainer.waitingPlayers.Contains(playerId))
+		        if (gameContainer.waitingPlayers.ContainsKey(playerId))
 			        success = success && sendToIdem(new RemovePlayerMessage(gameId, playerId));
 
 		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var match))
@@ -109,11 +124,22 @@ namespace Beamable.Microservices.Idem.IdemLogic
         {
 	        foreach (var (gameId, gameContainer) in gameModes)
 	        {
-		        if (gameContainer.waitingPlayers.Contains(playerId))
+		        if (gameContainer.waitingPlayers.TryGetValue(playerId, out var waitingPlayer))
+		        {
+			        if (waitingPlayer.isInactive)
+			        {
+				        // there is a removal request already sent to Idem due to inactivity
+				        return MMStateResponse.Timeout();
+			        }
+			        
+			        waitingPlayer.lastSeen = DateTime.Now;
 			        return MMStateResponse.InQueue(gameId);
+		        }
 
-		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var match))
-			        return MMStateResponse.MatchFound(gameId, match.matchId, match.players);
+		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var pendingMatch))
+			        return MMStateResponse.MatchFound(gameId, pendingMatch.matchId, pendingMatch.players);
+		        if (gameContainer.activeMatches.TryGetValue(playerId, out var activeMatch))
+			        return MMStateResponse.MatchFound(gameId, activeMatch.matchId, activeMatch.players);
 	        }
 	        
 	        return MMStateResponse.None();
@@ -121,7 +147,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         public BaseResponse ConfirmMatch(string playerId, string matchId)
         {
-	        var match = FindMatch(playerId, matchId);
+	        var match = FindAnyMatch(playerId, matchId);
 	        if (match == null)
 		        return BaseResponse.UnknownMatchFailure;
 
@@ -134,7 +160,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         public BaseResponse CompleteMatch(string playerId, string matchId, IdemMatchResult result)
         {
-	        var match = FindMatch(playerId, matchId);
+	        var match = FindAnyMatch(playerId, matchId);
 	        if (match == null)
 		        return BaseResponse.UnknownMatchFailure;
 
@@ -192,7 +218,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         private GameModeContainer GetGameMode(string gameMode) => gameModes.GetValueOrDefault(gameMode);
 
-        private CachedMatch FindMatch(string playerId, string matchId)
+        private CachedMatch FindAnyMatch(string playerId, string matchId)
         {
 	        var allMatches =
 		        gameModes.Values.SelectMany(g => g.pendingMatches.Values)
@@ -205,10 +231,58 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        );
         }
 
-        private void HandleMatchSuggestion(string payloadGameId, Match match)
+        private CachedMatch FindPendingMatch(string matchId, out GameModeContainer outGameMode)
         {
-	        // TODO_IDEM
-	        throw new NotImplementedException();
+	        foreach (var gameMode in gameModes.Values)
+	        foreach (var match in gameMode.pendingMatches.Values)
+	        {
+		        if (match.matchId == matchId)
+		        {
+			        outGameMode = gameMode;
+			        return match;
+		        }
+	        }
+
+	        outGameMode = null;
+	        return null;
+        }
+
+        private CachedMatch FindActiveMatch(string matchId, out GameModeContainer outGameMode)
+        {
+	        foreach (var gameMode in gameModes.Values)
+	        foreach (var match in gameMode.activeMatches.Values)
+	        {
+		        if (match.matchId == matchId)
+		        {
+			        outGameMode = gameMode;
+			        return match;
+		        }
+	        }
+
+	        outGameMode = null;
+	        return null;
+        }
+
+        private void HandleMatchSuggestion(string gameId, Match match)
+        {
+	        var gameContainer = GetGameMode(gameId);
+	        if (gameContainer == null)
+	        {
+		        Debug.LogError($"Got match {match.uuid} suggested for unsupported game mode {gameId}");
+		        return;
+	        }
+
+	        var cachedMatch = new CachedMatch(gameId, match);
+	        for (var i = 0; i < cachedMatch.players.Length; i++)
+	        {
+		        var p = cachedMatch.players[i];
+		        gameContainer.pendingMatches[p.playerId] = cachedMatch;
+		        if (gameContainer.waitingPlayers.TryGetValue(p.playerId, out var waitingPlayer))
+		        {
+			        cachedMatch.lastSeen[i] = waitingPlayer.lastSeen;
+			        gameContainer.waitingPlayers.Remove(p.playerId);
+		        }
+	        }
         }
 
         private void OnAddPlayerResponse(AddPlayerResponseMessage addPlayerResponse)
@@ -219,7 +293,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 	        foreach (var player in addPlayerResponse.payload.players)
 	        {
-		        gameContainer.waitingPlayers.Add(player.playerId);
+		        gameContainer.waitingPlayers[player.playerId] = new WaitingPlayer();
 	        }
 
 	        SignalAwaiters(addPlayerResponse);
@@ -231,7 +305,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        if (gameContainer == null || removePlayerResponse.payload.playerId == null)
 		        return;
 
-	        gameContainer.waitingPlayers.Remove(removePlayerResponse.payload.playerId);
+	        gameContainer.waitingPlayers.Remove(new (removePlayerResponse.payload.playerId));
 	        SignalAwaiters(removePlayerResponse);
         }
 
@@ -263,16 +337,61 @@ namespace Beamable.Microservices.Idem.IdemLogic
         private void OnConfirmMatchResponse(ConfirmMatchResponseMessage confirmMatchResponse)
         {
 	        SignalAwaiters(confirmMatchResponse);
+
+	        var match = FindPendingMatch(confirmMatchResponse.payload.matchId, out var gameMode);
+	        if (match == null)
+	        {
+		        Debug.LogWarning($"Got confirmation for unknown match {confirmMatchResponse.payload.matchId}");
+		        return;
+	        }
+	        if (match.isActive)
+	        {
+		        Debug.LogWarning($"Got confirmation for active match {confirmMatchResponse.payload.matchId}");
+	        }
+
+	        match.isActive = true;
+	        
+	        foreach (var p in match.players)
+	        {
+		        gameMode.pendingMatches.Remove(p.playerId);
+		        gameMode.activeMatches[p.playerId] = match;
+	        }
         }
 
         private void OnFailMatchResponse(FailMatchResponseMessage failMatchResponse)
         {
 	        SignalAwaiters(failMatchResponse);
+	        
+	        // TODO_IDEM
         }
 
         private void OnCompleteMatchResponse(CompleteMatchResponseMessage completeMatchResponse)
         {
 	        SignalAwaiters(completeMatchResponse);
+
+	        var match = FindActiveMatch(completeMatchResponse.payload.matchId, out var gameMode);
+	        if (match == null)
+	        {
+		        Debug.LogWarning($"Got completion for unknown match {completeMatchResponse.payload.matchId}");
+		        return;
+	        }
+	        if (match.isCompleted)
+	        {
+		        Debug.LogWarning($"Got completion for completed match {completeMatchResponse.payload.matchId}");
+	        }
+
+	        match.isCompleted = true;
+
+	        foreach (var p in match.players)
+	        {
+		        gameMode.activeMatches.Remove(p.playerId);
+	        }
+	        
+	        foreach (var fullPlayerStats in completeMatchResponse.payload.players)
+				recentPlayers.Enqueue(fullPlayerStats);
+
+	        while (recentPlayers.Count > MaxRecentPlayers)
+		        recentPlayers.Dequeue();
         }
 
         private void OnMatchSuggestion(MatchSuggestionMessage matchSuggestion)
@@ -284,7 +403,82 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        
 	        HandleMatchSuggestion(matchSuggestion.payload.gameId, matchSuggestion.payload.match);
         }
+
+        private void OnEverySecond(Object source, ElapsedEventArgs elapsedArgs)
+        {
+	        try
+	        {
+				TimeoutPlayers();
+				TimoutPendingMatches();
+	        }
+	        catch (Exception e)
+	        {
+		        Debug.LogError($"Timeout handling exception: {e}");
+	        }
+        }
+
+        private void TimeoutPlayers()
+        {
+	        var toRemove = new List<(string gameId, string playerId)>();
+			var now = DateTime.Now;
+	        foreach (var (gameId, gameModeContainer) in gameModes)
+			foreach (var (playerId, waitingPlayer) in gameModeContainer.waitingPlayers)
+			{
+				if (now - waitingPlayer.lastSeen > playerTimeoutMs)
+				{
+					waitingPlayer.isInactive = true;
+					toRemove.Add((gameId, playerId));
+				}
+			}
+
+	        foreach (var (gameId, playerId) in toRemove)
+	        {
+		        sendToIdem(new RemovePlayerMessage(gameId, playerId));
+	        }
+        }
         
+        private void TimoutPendingMatches()
+        {
+	        var toRemove = new Dictionary<CachedMatch, List<string>>();
+			var now = DateTime.Now;
+	        foreach (var gameModeContainer in gameModes.Values)
+	        {
+		        toRemove.Clear();
+		        foreach (var match in gameModeContainer.pendingMatches.Values)
+		        {
+			        for (var i = 0; i < match.players.Length; i++)
+			        {
+				        var p = match.players[i];
+				        var lastSeen = match.lastSeen[i];
+				        if (now - lastSeen <= playerTimeoutMs)
+					        continue;
+				        
+				        if (!toRemove.TryGetValue(match, out var list))
+				        {
+					        list = new List<string>();
+					        toRemove[match] = list;
+				        }
+
+				        list.Add(p.playerId);
+			        }
+		        }
+	        }
+
+	        foreach (var (match, timeoutedList) in toRemove)
+	        {
+		        var failMatchMessage = new FailMatchMessage(
+			        match.gameId,
+			        match.matchId,
+			        timeoutedList.ToArray(),
+			        match.players
+				        .Where(p => !timeoutedList.Contains(p.playerId))
+				        .Select(p => p.playerId)
+				        .ToArray()
+		        );
+		        sendToIdem(failMatchMessage);
+	        }
+		}
+
         private void AddAwaiter<T>(TaskCompletionSource<BaseIdemMessage> awaiter) where T : BaseIdemMessage
 		{
 	        var type = typeof(T);

@@ -1,6 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
-using Beamable.Microservices.Idem.Shared;
+using Beamable.Common.Runtime.Collections;
 using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 
 namespace Beamable.Microservices.Idem.IdemLogic
@@ -10,18 +11,29 @@ namespace Beamable.Microservices.Idem.IdemLogic
 		/**
 		 * Players with AddPlayer sent but no match suggestions received
 		 */
-		public readonly HashSet<string> waitingPlayers = new();
+		public readonly ConcurrentDictionary<string, WaitingPlayer> waitingPlayers = new();
 
 		/**
 		 * Players with match suggestions received but not confirmed
 		 */
-		public readonly Dictionary<string, CachedMatch> pendingMatches = new();
+		public readonly ConcurrentDictionary<string, CachedMatch> pendingMatches = new();
 
 		/**
 		 * Players with confirmed matches without completion
 		 */
-		public readonly Dictionary<string, CachedMatch> activeMatches = new();
+		public readonly ConcurrentDictionary<string, CachedMatch> activeMatches = new();
 		// TODO_IDEM clear active matches after big timeout (like a day) to avoid memory leak
+	}
+
+	internal class WaitingPlayer
+	{
+		public DateTime lastSeen;
+		public bool isInactive;
+
+		public WaitingPlayer()
+		{
+			lastSeen = DateTime.Now;
+		}
 	}
 
 	internal class CachedMatch
@@ -30,7 +42,9 @@ namespace Beamable.Microservices.Idem.IdemLogic
 		public readonly string matchId;
 		public readonly IdemPlayer[] players;
 		public readonly bool[] confirmed;
+		public readonly DateTime[] lastSeen;
 		public bool isActive;
+		public bool isCompleted;
 
 		public CachedMatch(string gameId, Match match)
 		{
@@ -47,7 +61,9 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			}
 			
 			this.players = players.ToArray();
-			this.confirmed = new bool[this.players.Length];
+
+			confirmed = new bool[this.players.Length];
+			lastSeen = new DateTime[this.players.Length];
 		}
 
 		public bool ConfirmedByAll => confirmed.All(t => t);
