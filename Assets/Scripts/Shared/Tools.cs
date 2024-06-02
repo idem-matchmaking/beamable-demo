@@ -13,7 +13,7 @@ namespace Beamable.Microservices.Idem.Shared
             }
             catch (Exception e)
             {
-                Debug.LogError($"Could not parse json to {nameof(T)}: {e.Message}");
+                Debug.LogError($"Could not parse json '{json}' to {typeof(T).Name}: {e.Message}\n{e.StackTrace}");
                 return default;
             }
         }

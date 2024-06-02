@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -160,72 +161,82 @@ namespace Beamable.Microservices
         {
             if (connectionTask != null)
                 return;
-            
+
             var connectionCompletion = new TaskCompletionSource<bool>();
-            connectionTask = connectionCompletion.Task;
-
-            var config = await Services.RealmConfig.GetRealmConfigSettings();
-            debug = !string.IsNullOrWhiteSpace(config.GetSetting(ConfigNamespace, DebugConfigKey));
-            var idemUsername = config.GetSetting(ConfigNamespace, IdemUsernameConfigKey);
-            var idemPassword = config.GetSetting(ConfigNamespace, IdemPasswordConfigKey);
-            var idemClientId = config.GetSetting(ConfigNamespace, IdemClientIdConfigKey);
-            var gameModesStr = config.GetSetting(ConfigNamespace, SupportedGameModesConfigKey);
-            if (string.IsNullOrWhiteSpace(idemUsername) || string.IsNullOrWhiteSpace(idemPassword) ||
-                string.IsNullOrWhiteSpace(idemClientId) || string.IsNullOrWhiteSpace(gameModesStr))
+                
+            try
             {
-                Fail($"Idem config is not complete: {IdemUsernameConfigKey}, {IdemPasswordConfigKey}, {IdemClientIdConfigKey}, {SupportedGameModesConfigKey} are required");
-                return;
+                connectionTask = connectionCompletion.Task;
+
+                var config = await Services.RealmConfig.GetRealmConfigSettings();
+                debug = !string.IsNullOrWhiteSpace(config.GetSetting(ConfigNamespace, DebugConfigKey));
+                var idemUsername = config.GetSetting(ConfigNamespace, IdemUsernameConfigKey);
+                var idemPassword = config.GetSetting(ConfigNamespace, IdemPasswordConfigKey);
+                var idemClientId = config.GetSetting(ConfigNamespace, IdemClientIdConfigKey);
+                var gameModesStr = config.GetSetting(ConfigNamespace, SupportedGameModesConfigKey);
+                if (string.IsNullOrWhiteSpace(idemUsername) || string.IsNullOrWhiteSpace(idemPassword) ||
+                    string.IsNullOrWhiteSpace(idemClientId) || string.IsNullOrWhiteSpace(gameModesStr))
+                {
+                    Fail(
+                        $"Idem config is not complete: {IdemUsernameConfigKey}, {IdemPasswordConfigKey}, {IdemClientIdConfigKey}, {SupportedGameModesConfigKey} are required");
+                    return;
+                }
+
+                var token = await AWSAuth.AuthAndGetToken(idemUsername, idemPassword, idemClientId, debug);
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    Fail($"Could not authorize with AWS Cognito: response token is empty");
+                    return;
+                }
+
+                gameModes.Clear();
+                gameModes.AddRange(gameModesStr
+                    .Split(",")
+                    .Select(s => s.Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                );
+
+                Debug.Log($"Supported game modes: {string.Join(", ", gameModes.Select(s => $"'{s}'"))}");
+                if (gameModes.Count == 0)
+                {
+                    Fail($"No supported game modes. Halt.");
+                    return;
+                }
+
+                const int defaultPlayerTimeoutMs = 5000;
+                var playerTimeoutMs = ParseConfigInt(config, PlayerTimoutMsConfigKey, defaultPlayerTimeoutMs);
+
+                const int defaultGlobalMatchTimeoutS = 86400;
+                var globalMatchTimeoutS =
+                    ParseConfigInt(config, GlobalMatchTimeoutSConfigKey, defaultGlobalMatchTimeoutS);
+
+                logic ??= new(debug, playerTimeoutMs, globalMatchTimeoutS, SendThroughWs);
+                logic.UpdateSupportedGameModes(gameModes);
+
+                // TODO_IDEM implement multiple game modes in the push mode
+                var pushParams = $"receiveMatches=true&gameMode={gameModes[0]}&";
+                var connectionUrl = $"wss://ws-int.idem.gg/?{pushParams}authorization={token}";
+                Debug.Log($"Starting Idem connection to: {connectionUrl}");
+
+                ws = new WebSocket(connectionUrl);
+                ws.OnOpen += (sender, param) =>
+                {
+                    connectionCompletion.SetResult(ws.ReadyState == WebSocketState.Open);
+                    Debug.Log("Idem WS is open");
+                };
+                ws.OnClose += OnWsClose;
+                ws.OnMessage += OnWsMessage;
+                ws.OnError += OnWsError;
+
+                ws.Connect();
+
+                Debug.Log($"Idem WS state: {ws.ReadyState}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Initialization exception: {e.Message}\n{e.StackTrace}");
             }
 
-            var token = await AWSAuth.AuthAndGetToken(idemUsername, idemPassword, idemClientId, debug);
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                Fail($"Could not authorize with AWS Cognito: response token is empty");
-                return;
-            }
-
-            gameModes.Clear();
-            gameModes.AddRange(gameModesStr
-                .Split(",")
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-            );
-            
-            Debug.Log($"Supported game modes: {string.Join(", ", gameModes.Select(s => $"'{s}'"))}");
-            if (gameModes.Count == 0)
-            {
-                Fail($"No supported game modes. Halt.");
-                return;
-            }
-            
-            const int defaultPlayerTimeoutMs = 5000;
-            var playerTimeoutMs = ParseConfigInt(config, PlayerTimoutMsConfigKey, defaultPlayerTimeoutMs);
-            
-            const int defaultGlobalMatchTimeoutS = 86400;
-            var globalMatchTimeoutS = ParseConfigInt(config, GlobalMatchTimeoutSConfigKey, defaultGlobalMatchTimeoutS);
-            
-            logic ??= new(debug, playerTimeoutMs, globalMatchTimeoutS, SendThroughWs);
-            logic.UpdateSupportedGameModes(gameModes);
-            
-            // TODO_IDEM implement multiple game modes in the push mode
-            var pushParams = $"receiveMatches=true&gameMode={gameModes[0]}&";
-            var connectionUrl = $"wss://ws-int.idem.gg/?{pushParams}authorization={token}";
-            Debug.Log($"Starting Idem connection to: {connectionUrl}");
-
-            ws = new WebSocket(connectionUrl);
-            ws.OnOpen += (sender, param) =>
-            {
-                connectionCompletion.SetResult(ws.ReadyState == WebSocketState.Open);
-                Debug.Log("Idem WS is open");
-            };
-            ws.OnClose += OnWsClose;
-            ws.OnMessage += OnWsMessage;
-            ws.OnError += OnWsError;
-            
-            ws.Connect();
-
-            Debug.Log($"Idem WS state: {ws.ReadyState}");
-            
             return;
 
             void Fail(string message)
@@ -254,18 +265,19 @@ namespace Beamable.Microservices
                 Debug.LogError($"Trying to send null payload to Idem WS");
                 return false;
             }
+            
+            var json = payload.ToJson();
+            if (debug)
+                Debug.Log($"Sending message to Idem: {json}");
 
             if (ws is not { ReadyState: WebSocketState.Open })
             {
                 Debug.LogError($"Trying to send payload with Idem WS in the wrong state '{ws?.ReadyState}'");
                 return false;
             }
-            
-            var json = payload.ToJson();
-            if (debug)
-                Debug.Log($"Sending message to Idem: {json}");
-            
+
             ws.Send(json);
+
             return true;
         }
 

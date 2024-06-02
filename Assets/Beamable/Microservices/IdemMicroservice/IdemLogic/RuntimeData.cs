@@ -26,11 +26,13 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 	internal class WaitingPlayer
 	{
+		public readonly string playerId;
 		public DateTime lastSeen;
 		public bool isInactive;
 
-		public WaitingPlayer()
+		public WaitingPlayer(string playerId)
 		{
+			this.playerId = playerId;
 			lastSeen = DateTime.Now;
 		}
 	}
@@ -107,6 +109,17 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			for (int i=0; i<players.Length; i++)
 			{
 				if (players[i].playerId == playerId)
+				{
+					playerLeft[i] = true;
+				}
+			}
+		}
+
+		public void PlayersLeft(List<string> timeoutedList)
+		{
+			for (int i=0; i<players.Length; i++)
+			{
+				if (timeoutedList.Contains(players[i].playerId))
 				{
 					playerLeft[i] = true;
 				}

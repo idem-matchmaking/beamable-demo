@@ -178,6 +178,9 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        var match = FindAnyMatch(playerId, matchId);
 	        if (match == null)
 		        return BaseResponse.UnknownMatchFailure;
+	        
+	        if (match.isActive)
+				return ConfirmMatchResponse.MatchConfirmed;
 
 	        match.ConfirmBy(playerId);
 	        if (match.ConfirmedByAll && sendToIdem(new ConfirmMatchMessage(match.gameId, match.matchId)))
@@ -327,7 +330,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 	        foreach (var player in addPlayerResponse.payload.players)
 	        {
-		        gameContainer.waitingPlayers[player.playerId] = new WaitingPlayer();
+		        gameContainer.waitingPlayers[player.playerId] = new WaitingPlayer(player.playerId);
 	        }
 
 	        SignalAwaiters(addPlayerResponse);
@@ -402,7 +405,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 				gameMode.pendingMatches.Remove(p.playerId);
 				
 				if (!match.playerLeft[i])
-					gameMode.waitingPlayers[p.playerId] = new WaitingPlayer();
+					gameMode.waitingPlayers[p.playerId] = new WaitingPlayer(p.playerId);
 			}
         }
 
@@ -461,7 +464,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         private void TimeoutPlayers()
         {
-	        var toRemove = new List<(string gameId, string playerId)>();
+	        var toRemove = new List<(string gameId, WaitingPlayer player)>();
 			var now = DateTime.Now;
 	        foreach (var (gameId, gameModeContainer) in gameModes)
 			foreach (var (playerId, waitingPlayer) in gameModeContainer.waitingPlayers)
@@ -469,16 +472,16 @@ namespace Beamable.Microservices.Idem.IdemLogic
 				if (now - waitingPlayer.lastSeen <= playerTimeout || waitingPlayer.isInactive)
 					continue;
 				
-				waitingPlayer.isInactive = true;
-				toRemove.Add((gameId, playerId));
+				toRemove.Add((gameId, waitingPlayer));
 				
 				if (debug)
 					Debug.Log($"Player {playerId} timed out in game mode {gameId}: last seen {waitingPlayer.lastSeen}, now {now}");
 			}
 
-	        foreach (var (gameId, playerId) in toRemove)
+	        foreach (var (gameId, waitingPlayer) in toRemove)
 	        {
-		        sendToIdem(new RemovePlayerMessage(gameId, playerId));
+				if (sendToIdem(new RemovePlayerMessage(gameId, waitingPlayer.playerId)))
+					waitingPlayer.isInactive = true;
 	        }
         }
         
@@ -496,8 +499,6 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			        if (now - lastSeen <= playerTimeout || match.hasPlayerLeft)
 				        continue;
 
-			        match.playerLeft[i] = true;
-			        
 			        if (!toRemove.TryGetValue(match, out var list))
 			        {
 				        list = new List<string>();
@@ -521,7 +522,10 @@ namespace Beamable.Microservices.Idem.IdemLogic
 				        .Select(p => p.playerId)
 				        .ToArray()
 		        );
-		        sendToIdem(failMatchMessage);
+		        if (sendToIdem(failMatchMessage))
+		        {
+			        match.PlayersLeft(timeoutedList);
+		        }
 	        }
 		}
 

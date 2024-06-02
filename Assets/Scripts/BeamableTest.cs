@@ -133,20 +133,26 @@ namespace DefaultNamespace
         private async void UpdatePlayers()
         {
             var players = await idemClient.DebugGetPlayers(gameModeText);
-            playersText = players;
+            playersText = ParseResponse(players);
             Debug.Log($"Got response {players}");
         }
         
         private async void UpdateMatches()
         {
             var matches = await idemClient.DebugGetMatches(gameModeText);
-            matchesText = matches;
+            matchesText = ParseResponse(matches);
         }
         
         private async void GetFullPlayerStats()
         {
             var matches = await idemClient.DebugGetRecentPlayer(playerId);
-            fullPlayerStatsText = matches;
+            fullPlayerStatsText = ParseResponse(matches);
+        }
+
+        private string ParseResponse(string response)
+        {
+            var parsed = JsonUtil.Parse<StringResponse>(response);
+            return parsed?.value ?? response;
         }
 
         private object CreateDummyMatchResult()
