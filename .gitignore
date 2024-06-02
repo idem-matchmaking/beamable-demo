@@ -10,3 +10,5 @@ Assembly-CSharp.csproj
 Beamable.Microservice.Idem.csproj
 demo-beamable.sln
 Unity.Beamable.Customer.MicroserviceClients.csproj
+Beamable.Microservice.IdemMicroservice.csproj
+IdemMicroserviceShared.csproj
