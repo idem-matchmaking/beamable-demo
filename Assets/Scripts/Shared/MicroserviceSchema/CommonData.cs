@@ -2,8 +2,8 @@
 {
     public class IdemPlayer
     {
-        public readonly int teamId;
-        public readonly string playerId;
+        public int teamId;
+        public string playerId;
 
         public IdemPlayer(int teamId, string playerId)
         {

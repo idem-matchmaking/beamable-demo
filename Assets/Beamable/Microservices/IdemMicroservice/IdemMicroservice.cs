@@ -6,6 +6,7 @@ using Beamable.Microservices.Idem.Shared;
 using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
 using Beamable.Microservices.Idem.Tools;
 using Beamable.Server;
+using Beamable.Server.Api.RealmConfig;
 using UnityEngine;
 using WebSocketSharp;
 
@@ -14,7 +15,6 @@ namespace Beamable.Microservices
 	[Microservice("IdemMicroservice")]
 	public class IdemMicroservice : Microservice
 	{
-        
         // microsservice config keys
         private const string ConfigNamespace = "Idem";
         private const string IdemUsernameConfigKey = "Username";
@@ -23,6 +23,7 @@ namespace Beamable.Microservices
         private const string DebugConfigKey = "Debug";
         private const string SupportedGameModesConfigKey = "SupportedGameModes";
         private const string PlayerTimoutMsConfigKey = "PlayerTimeoutMs";
+        private const string GlobalMatchTimeoutSConfigKey = "GlobalMatchTimeoutS";
         
         // microservice state
         private static bool debug = false;
@@ -34,31 +35,40 @@ namespace Beamable.Microservices
         // convenience
         private string playerId => Context.UserId == 0 ? null : Context.UserId.ToString();
 
-        [AdminOnlyCallable]
-        public async Task<string> AdminGetPlayers(string gameId)
+        [ClientCallable]
+        public async Task<string> DebugGetPlayers(string gameId)
         {
+            if (!debug)
+                return string.Empty;
+            
             var connectionError = await CheckConnection();
             if (connectionError != null)
                 return connectionError;
 
-            var result = logic.GetPlayers(gameId);
+            var result = await logic.GetPlayers(gameId);
             return result.ToJson();
         }
 
-        [AdminOnlyCallable]
-        public async Task<string> AdminGetMatches(string gameId)
+        [ClientCallable]
+        public async Task<string> DebugGetMatches(string gameId)
         {
+            if (!debug)
+                return string.Empty;
+            
             var connectionError = await CheckConnection();
             if (connectionError != null)
                 return connectionError;
 
-            var result = logic.GetMatches(gameId);
+            var result = await logic.GetMatches(gameId);
             return result.ToJson();
         }
 
-        [AdminOnlyCallable]
-        public async Task<string> AdminGetRecentPlayer(string anyPlayerId)
+        [ClientCallable]
+        public async Task<string> DebugGetRecentPlayer(string anyPlayerId)
         {
+            if (!debug)
+                return string.Empty;
+            
             var connectionError = await CheckConnection();
             if (connectionError != null)
                 return connectionError;
@@ -139,9 +149,18 @@ namespace Beamable.Microservices
 
             return null;
         }
+        
+        private async void InitAfterDelay()
+        {
+            await Task.Delay(2000);
+            await Initialize();
+        }
 
         private async Task Initialize()
         {
+            if (connectionTask != null)
+                return;
+            
             var connectionCompletion = new TaskCompletionSource<bool>();
             connectionTask = connectionCompletion.Task;
 
@@ -165,6 +184,7 @@ namespace Beamable.Microservices
                 return;
             }
 
+            gameModes.Clear();
             gameModes.AddRange(gameModesStr
                 .Split(",")
                 .Select(s => s.Trim())
@@ -178,15 +198,13 @@ namespace Beamable.Microservices
                 return;
             }
             
-            var playerTimeoutMsStr = config.GetSetting(ConfigNamespace, PlayerTimoutMsConfigKey);
-            if (!int.TryParse(playerTimeoutMsStr, out var playerTimeoutMs))
-            {
-                const int defaultPlayerTimeoutMs = 5000;
-                Debug.LogWarning($"Could not parse player timeout ms: '{playerTimeoutMsStr}', using default {defaultPlayerTimeoutMs}");
-                playerTimeoutMs = defaultPlayerTimeoutMs;
-            }
+            const int defaultPlayerTimeoutMs = 5000;
+            var playerTimeoutMs = ParseConfigInt(config, PlayerTimoutMsConfigKey, defaultPlayerTimeoutMs);
             
-            logic ??= new(debug, playerTimeoutMs, SendThroughWs);
+            const int defaultGlobalMatchTimeoutS = 86400;
+            var globalMatchTimeoutS = ParseConfigInt(config, GlobalMatchTimeoutSConfigKey, defaultGlobalMatchTimeoutS);
+            
+            logic ??= new(debug, playerTimeoutMs, globalMatchTimeoutS, SendThroughWs);
             logic.UpdateSupportedGameModes(gameModes);
             
             // TODO_IDEM implement multiple game modes in the push mode
@@ -217,6 +235,18 @@ namespace Beamable.Microservices
             }
         }
 
+        private int ParseConfigInt(RealmConfig config, string keyName, int defaultValue)
+        {
+            var playerTimeoutMsStr = config.GetSetting(ConfigNamespace, keyName);
+            if (!int.TryParse(playerTimeoutMsStr, out var parsedValue))
+            {
+                Debug.LogWarning($"Could not parse {keyName} value: '{playerTimeoutMsStr}', using default {defaultValue}");
+                parsedValue = defaultValue;
+            }
+
+            return parsedValue;
+        }
+
         private bool SendThroughWs(object payload)
         {
             if (payload == null)
@@ -241,10 +271,12 @@ namespace Beamable.Microservices
 
         private void OnWsError(object sender, ErrorEventArgs errorArgs)
         {
-            Debug.LogError($"Idem WS error: {errorArgs.Message}\n{errorArgs.Exception.StackTrace}");
+            Debug.LogError(
+                $"Idem WS error: {errorArgs.Message}\n" +
+                $"{errorArgs.Exception.StackTrace}\n" +
+                $"Inner:{errorArgs.Exception.InnerException?.Message}\n" +
+                $"Inner stack:{errorArgs.Exception.InnerException?.StackTrace}");
             Debug.Log($"Idem WS state: {ws.ReadyState}");
-            if (ws.ReadyState != WebSocketState.Open)
-                ws.Close();
         }
 
         private void OnWsClose(object sender, CloseEventArgs closeArgs)
@@ -252,14 +284,12 @@ namespace Beamable.Microservices
             Debug.Log($"Idem WS is closed: {closeArgs.Code}, reason {closeArgs.Reason}, clean {closeArgs.WasClean}");
             ws = null;
             connectionTask = null;
+            InitAfterDelay();
         }
 
         private void OnWsMessage(object sender, MessageEventArgs messageArgs)
         {
             logic?.HandleIdemMessage(messageArgs.Data);
-            
-            if (debug)
-                Debug.Log("Idem WS message: " + messageArgs.Data);
         }
 	}
 }

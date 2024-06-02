@@ -32,39 +32,39 @@ namespace Beamable.Server.Clients
         }
         
         /// <summary>
-        /// Call the AdminGetPlayers method on the IdemMicroservice microservice
-        /// <see cref="Beamable.Microservices.IdemMicroservice.AdminGetPlayers"/>
+        /// Call the DebugGetPlayers method on the IdemMicroservice microservice
+        /// <see cref="Beamable.Microservices.IdemMicroservice.DebugGetPlayers"/>
         /// </summary>
-        public Beamable.Common.Promise<string> AdminGetPlayers(string gameId)
+        public Beamable.Common.Promise<string> DebugGetPlayers(string gameId)
         {
             object raw_gameId = gameId;
             System.Collections.Generic.Dictionary<string, object> serializedFields = new System.Collections.Generic.Dictionary<string, object>();
             serializedFields.Add("gameId", raw_gameId);
-            return this.Request<string>("IdemMicroservice", "AdminGetPlayers", serializedFields);
+            return this.Request<string>("IdemMicroservice", "DebugGetPlayers", serializedFields);
         }
         
         /// <summary>
-        /// Call the AdminGetMatches method on the IdemMicroservice microservice
-        /// <see cref="Beamable.Microservices.IdemMicroservice.AdminGetMatches"/>
+        /// Call the DebugGetMatches method on the IdemMicroservice microservice
+        /// <see cref="Beamable.Microservices.IdemMicroservice.DebugGetMatches"/>
         /// </summary>
-        public Beamable.Common.Promise<string> AdminGetMatches(string gameId)
+        public Beamable.Common.Promise<string> DebugGetMatches(string gameId)
         {
             object raw_gameId = gameId;
             System.Collections.Generic.Dictionary<string, object> serializedFields = new System.Collections.Generic.Dictionary<string, object>();
             serializedFields.Add("gameId", raw_gameId);
-            return this.Request<string>("IdemMicroservice", "AdminGetMatches", serializedFields);
+            return this.Request<string>("IdemMicroservice", "DebugGetMatches", serializedFields);
         }
         
         /// <summary>
-        /// Call the AdminGetRecentPlayer method on the IdemMicroservice microservice
-        /// <see cref="Beamable.Microservices.IdemMicroservice.AdminGetRecentPlayer"/>
+        /// Call the DebugGetRecentPlayer method on the IdemMicroservice microservice
+        /// <see cref="Beamable.Microservices.IdemMicroservice.DebugGetRecentPlayer"/>
         /// </summary>
-        public Beamable.Common.Promise<string> AdminGetRecentPlayer(string anyPlayerId)
+        public Beamable.Common.Promise<string> DebugGetRecentPlayer(string anyPlayerId)
         {
             object raw_anyPlayerId = anyPlayerId;
             System.Collections.Generic.Dictionary<string, object> serializedFields = new System.Collections.Generic.Dictionary<string, object>();
             serializedFields.Add("anyPlayerId", raw_anyPlayerId);
-            return this.Request<string>("IdemMicroservice", "AdminGetRecentPlayer", serializedFields);
+            return this.Request<string>("IdemMicroservice", "DebugGetRecentPlayer", serializedFields);
         }
         
         /// <summary>

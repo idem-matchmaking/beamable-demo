@@ -344,7 +344,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
     public class PlayerStatus : Player
     {
-        public string status;
+        public string state;
     }
 
     public class PlayerFullStats : Player

@@ -2,7 +2,7 @@
 {
     public class StringResponse : BaseResponse
     {
-        public readonly string value;
+        public string value;
 
         public StringResponse(string value) : base(true)
         {
