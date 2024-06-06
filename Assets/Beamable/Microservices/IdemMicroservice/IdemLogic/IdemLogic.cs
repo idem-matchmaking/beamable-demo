@@ -19,6 +19,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
         private readonly TimeSpan playerTimeout;
         private readonly TimeSpan globalMatchTimeout;
         private readonly Dictionary<string, GameModeContainer> gameModes = new ();
+        private readonly List<CachedMatch> allMatches = new();
         private readonly Func<object, bool> sendToIdem;
         private readonly Dictionary<Type, List<TaskCompletionSource<BaseIdemMessage>>> incomingAwaiters = new ();
         private readonly Queue<PlayerFullStats> recentPlayers = new ();
@@ -256,26 +257,17 @@ namespace Beamable.Microservices.Idem.IdemLogic
         private GameModeContainer GetGameMode(string gameMode) => gameModes.GetValueOrDefault(gameMode);
 
         private CachedMatch FindAnyMatch(string playerId, string matchId)
-        {
-	        var allMatches =
-		        gameModes.Values.SelectMany(g => g.pendingMatches.Values)
-			        .Concat(
-				        gameModes.Values.SelectMany(g => g.activeMatches.Values)
-			        );
-	        
-	        return allMatches.FirstOrDefault(match =>
+	        => allMatches.FirstOrDefault(match =>
 		        match.matchId == matchId && match.players.Any(p => p.playerId == playerId)
 	        );
-        }
 
         private CachedMatch FindPendingMatch(string matchId, out GameModeContainer outGameMode)
         {
-	        foreach (var gameMode in gameModes.Values)
-	        foreach (var match in gameMode.pendingMatches.Values)
+			foreach (var match in allMatches)
 	        {
-		        if (match.matchId == matchId)
+		        if (!match.isActive && match.matchId == matchId)
 		        {
-			        outGameMode = gameMode;
+			        outGameMode = GetGameMode(match.gameId);
 			        return match;
 		        }
 	        }
@@ -286,12 +278,11 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
         private CachedMatch FindActiveMatch(string matchId, out GameModeContainer outGameMode)
         {
-	        foreach (var gameMode in gameModes.Values)
-	        foreach (var match in gameMode.activeMatches.Values)
+	        foreach (var match in allMatches)
 	        {
-		        if (match.matchId == matchId)
+		        if (match.isActive && match.matchId == matchId)
 		        {
-			        outGameMode = gameMode;
+					outGameMode = GetGameMode(match.gameId);
 			        return match;
 		        }
 	        }
@@ -310,6 +301,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        }
 
 	        var cachedMatch = new CachedMatch(gameId, match);
+	        allMatches.Add(cachedMatch);
 	        for (var i = 0; i < cachedMatch.players.Length; i++)
 	        {
 		        var p = cachedMatch.players[i];
@@ -399,6 +391,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 				return;
 			}
 
+			allMatches.Remove(match);
 			for (var i = 0; i < match.players.Length; i++)
 			{
 				var p = match.players[i];
@@ -426,6 +419,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 	        match.isCompleted = true;
 
+	        allMatches.Remove(match);
 	        foreach (var p in match.players)
 	        {
 		        gameMode.activeMatches.Remove(p.playerId);
@@ -489,8 +483,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
         {
 	        var toRemove = new Dictionary<CachedMatch, List<string>>();
 			var now = DateTime.Now;
-	        foreach (var gameModeContainer in gameModes.Values)
-	        foreach (var match in gameModeContainer.pendingMatches.Values)
+			foreach (var match in allMatches)
 	        {
 		        for (var i = 0; i < match.players.Length; i++)
 		        {
@@ -507,7 +500,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 			        list.Add(p.playerId);
 			        if (debug)
-				        Debug.Log($"Player {p.playerId} timed out in pending match {match.matchId} in game mode {gameModeContainer}: last seen {lastSeen}, now {now}");
+				        Debug.Log($"Player {p.playerId} timed out in pending match {match.matchId} in game mode {match.gameId}: last seen {lastSeen}, now {now}");
 		        }
 	        }
 
@@ -533,10 +526,32 @@ namespace Beamable.Microservices.Idem.IdemLogic
         {
 	        var toRemove = new List<CachedMatch>();
 			var now = DateTime.Now;
-	        foreach (var gameModeContainer in gameModes.Values)
+	        foreach (var match in allMatches)
 	        {
-				CheckAndClearTimeoutedMatches(toRemove, gameModeContainer.pendingMatches, true);
-				CheckAndClearTimeoutedMatches(toRemove, gameModeContainer.activeMatches, false);
+		        var time = match.isActive ? match.activatedAt : match.createdAt;
+		        if (now - time > globalMatchTimeout)
+		        {
+			        toRemove.Add(match);
+		        }
+	        }
+
+	        foreach (var match in toRemove)
+	        {
+		        if (debug)
+			        Debug.Log($"Removing match {match.matchId} by timeout, game mode {match.gameId}," +
+			                  $"isActive {match.isActive}, created at {match.createdAt}, activated at {match.activatedAt}, now {now}"
+			        );
+
+		        allMatches.Remove(match);
+		        var gameModeContainer = GetGameMode(match.gameId);
+		        if (gameModeContainer == null)
+			        continue;
+		        
+		        foreach (var p in match.players)
+		        {
+			        gameModeContainer.pendingMatches.Remove(p.playerId);
+			        gameModeContainer.activeMatches.Remove(p.playerId);
+		        }
 	        }
         }
 
@@ -560,6 +575,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			                  $"isActive {match.isActive}, created at {match.createdAt}, activated at {match.activatedAt}, now {now}"
 			        );
 
+		        allMatches.Remove(match);
 		        foreach (var p in match.players)
 		        {
 			        matches.Remove(p.playerId);
