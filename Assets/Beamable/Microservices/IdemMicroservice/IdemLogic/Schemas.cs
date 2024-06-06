@@ -192,7 +192,7 @@ namespace Beamable.Microservices.Idem.IdemLogic
     
     public class FailMatchResponseMessage : BaseIdemMessage
     {
-        public MatchIdPayload payload;
+        public FailMatchResponsePayload payload;
     }
 
     public class CompleteMatchMessage : BaseIdemMessage
@@ -295,6 +295,12 @@ namespace Beamable.Microservices.Idem.IdemLogic
     {
         public string[] remove;
         public string[] requeue;
+    }
+    
+    public class FailMatchResponsePayload : MatchIdPayload
+    {
+        public Player[] removed;
+        public Player[] requeued;
     }
 
     public class CompleteMatchReponsePayload : MatchIdPayload

@@ -392,13 +392,15 @@ namespace Beamable.Microservices.Idem.IdemLogic
 			}
 
 			allMatches.Remove(match);
-			for (var i = 0; i < match.players.Length; i++)
+			foreach (var removed in failMatchResponse.payload.removed)
 			{
-				var p = match.players[i];
-				gameMode.pendingMatches.Remove(p.playerId);
-				
-				if (!match.playerLeft[i])
-					gameMode.waitingPlayers[p.playerId] = new WaitingPlayer(p.playerId);
+				gameMode.pendingMatches.Remove(removed.playerId);
+				gameMode.activeMatches.Remove(removed.playerId);
+			}
+
+			foreach (var requeued in failMatchResponse.payload.requeued)
+			{
+				gameMode.waitingPlayers[requeued.playerId] = new WaitingPlayer(requeued.playerId);
 			}
         }
 

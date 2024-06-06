@@ -13,3 +13,4 @@ Unity.Beamable.Customer.MicroserviceClients.csproj
 Beamable.Microservice.IdemMicroservice.csproj
 IdemMicroserviceShared.csproj
 build
+Unity.Beamable.Customer.Common.csproj
