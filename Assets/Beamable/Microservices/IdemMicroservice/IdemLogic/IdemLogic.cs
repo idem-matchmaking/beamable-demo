@@ -36,6 +36,16 @@ namespace Beamable.Microservices.Idem.IdemLogic
             secondsTimer.AutoReset = true;
             secondsTimer.Enabled = true;
         }
+
+        public void InitialGetMatches(List<string> list)
+        {
+			foreach (var gameId in list)
+			{
+				var result = sendToIdem(new GetMatchesMessage(gameId));
+				if (!result)
+					Debug.LogError($"Failed to request matches for game mode {gameId}");
+			}
+        }
         
         public void UpdateSupportedGameModes(IEnumerable<string> gameModesUpdate)
         {
@@ -400,6 +410,9 @@ namespace Beamable.Microservices.Idem.IdemLogic
 
 			foreach (var requeued in failMatchResponse.payload.requeued)
 			{
+				gameMode.pendingMatches.Remove(requeued.playerId);
+				gameMode.activeMatches.Remove(requeued.playerId);
+				
 				gameMode.waitingPlayers[requeued.playerId] = new WaitingPlayer(requeued.playerId);
 			}
         }
@@ -486,7 +499,10 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        var toRemove = new Dictionary<CachedMatch, List<string>>();
 			var now = DateTime.Now;
 			foreach (var match in allMatches)
-	        {
+			{
+				if (match.isActive || match.isCompleted)
+					continue;
+				
 		        for (var i = 0; i < match.players.Length; i++)
 		        {
 			        var p = match.players[i];

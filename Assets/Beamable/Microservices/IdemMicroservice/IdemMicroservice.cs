@@ -86,7 +86,10 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.StartMatchmaking(playerId, gameMode, servers);
-            return result.ToJson();
+            var response = result.ToJson();
+            if (debug)
+                Debug.Log($"StartMatchmaking called for playerId {playerId}, gameMode {gameMode}, servers {string.Join(", ", servers)}, response: {response}");
+            return response;
         }
         
         [ClientCallable]
@@ -97,7 +100,10 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.StopMatchmaking(playerId);
-            return result.ToJson();
+            var response = result.ToJson();
+            if (debug)
+                Debug.Log($"StopMatchmaking called for playerId {playerId}, response: {response}");
+            return response;
         }
         
         [ClientCallable]
@@ -108,7 +114,10 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.GetMatchmakingStatus(playerId);
-            return result.ToJson();
+            var response = result.ToJson();
+            if (debug)
+                Debug.Log($"GetMatchmakingStatus called for playerId {playerId}, response: {response}");
+            return response;
         }
         
         [ClientCallable]
@@ -119,7 +128,10 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.ConfirmMatch(playerId, matchId);
-            return result.ToJson();
+            var response = result.ToJson();
+            if (debug)
+                Debug.Log($"ConfirmMatch called for playerId {playerId}, matchId {matchId}, response: {response}");
+            return response;
         }
         
         [ClientCallable]
@@ -132,7 +144,10 @@ namespace Beamable.Microservices
             var matchResult = JsonUtil.Parse<IdemMatchResult>(payload);
 
             var result = logic.CompleteMatch(playerId, matchId, matchResult);
-            return result.ToJson();
+            var response = result.ToJson();
+            if (debug)
+                Debug.Log($"CompleteMatch called for playerId {playerId}, matchId {matchId}, response: {response}");
+            return response;
         }
 
         private async Task<string> CheckConnection()
@@ -223,6 +238,7 @@ namespace Beamable.Microservices
                 {
                     connectionCompletion.SetResult(ws.ReadyState == WebSocketState.Open);
                     Debug.Log("Idem WS is open");
+                    logic.InitialGetMatches(gameModes);
                 };
                 ws.OnClose += OnWsClose;
                 ws.OnMessage += OnWsMessage;
