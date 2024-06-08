@@ -133,8 +133,9 @@ namespace Beamable.Microservices
             return response;
         }
         
+        
         [ClientCallable]
-        public async Task<string> CompleteMatch(string matchId, string payload)
+        public async Task<string> CompleteMatch(string payload)
         {
             var connectionError = await CheckConnection();
             if (connectionError != null)
@@ -142,10 +143,10 @@ namespace Beamable.Microservices
 
             var matchResult = JsonUtil.Parse<IdemMatchResult>(payload);
 
-            var result = logic.CompleteMatch(playerId, matchId, matchResult);
+            var result = logic.CompleteMatch(playerId, matchResult);
             var response = result.ToJson();
             if (debug)
-                Debug.Log($"CompleteMatch called for playerId {playerId}, matchId {matchId}, response: {response}");
+                Debug.Log($"CompleteMatch called for playerId {playerId}, matchId {matchResult.matchId}, response: {response}");
             return response;
         }
 

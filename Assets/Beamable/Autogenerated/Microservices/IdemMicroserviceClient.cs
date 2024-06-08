@@ -117,12 +117,10 @@ namespace Beamable.Server.Clients
         /// Call the CompleteMatch method on the IdemMicroservice microservice
         /// <see cref="Beamable.Microservices.IdemMicroservice.CompleteMatch"/>
         /// </summary>
-        public Beamable.Common.Promise<string> CompleteMatch(string matchId, string payload)
+        public Beamable.Common.Promise<string> CompleteMatch(string payload)
         {
-            object raw_matchId = matchId;
             object raw_payload = payload;
             System.Collections.Generic.Dictionary<string, object> serializedFields = new System.Collections.Generic.Dictionary<string, object>();
-            serializedFields.Add("matchId", raw_matchId);
             serializedFields.Add("payload", raw_payload);
             return this.Request<string>("IdemMicroservice", "CompleteMatch", serializedFields);
         }

@@ -174,11 +174,13 @@ namespace Beamable.Microservices.Idem.IdemLogic
 		        if (gameContainer.pendingMatches.TryGetValue(playerId, out var pendingMatch) && !pendingMatch.hasPlayerLeft)
 		        {
 			        pendingMatch.Seen(playerId);
-			        return MMStateResponse.MatchFound(gameId, pendingMatch.matchId, pendingMatch.players);
+			        // TODO_IDEM specify server
+			        return MMStateResponse.MatchFound(gameId, pendingMatch.matchId, "", pendingMatch.players);
 		        }
 		        
+				// TODO_IDEM specify server
 		        if (gameContainer.activeMatches.TryGetValue(playerId, out var activeMatch) && !activeMatch.hasPlayerLeft && !activeMatch.isCompleted)
-			        return MMStateResponse.MatchFound(gameId, activeMatch.matchId, activeMatch.players);
+			        return MMStateResponse.MatchReady(gameId, activeMatch.matchId, "", activeMatch.players);
 	        }
 	        
 	        return MMStateResponse.None();
@@ -200,9 +202,9 @@ namespace Beamable.Microservices.Idem.IdemLogic
 	        return ConfirmMatchResponse.MatchNotConfirmed;
         }
 
-        public BaseResponse CompleteMatch(string playerId, string matchId, IdemMatchResult result)
+        public BaseResponse CompleteMatch(string playerId, IdemMatchResult result)
         {
-	        var match = FindAnyMatch(playerId, matchId);
+	        var match = FindAnyMatch(playerId, result.matchId);
 	        if (match == null)
 		        return BaseResponse.UnknownMatchFailure;
 
