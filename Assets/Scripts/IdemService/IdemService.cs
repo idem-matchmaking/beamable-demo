@@ -14,6 +14,8 @@ namespace Idem
 {
     public class IdemService
     {
+        public bool IsMatchmaking { get; private set; }
+
         public MatchInfo? CurrentMatchInfo { get; private set; } = null;
         /**
          * Event fired when a match is found, but not all players confirmed ready.
@@ -24,12 +26,11 @@ namespace Idem
          */
         public event Action<MatchInfo> OnMatchReady;
 
-        private const float MatchmakingPollIntervalS = 2f;
+        private readonly WaitForSeconds MatchmakingPollInterval = new (2f);
         private readonly BeamContext ctx;
         private readonly IdemMicroserviceClient idemClient;
         private readonly CoroutineService coroutineService;
-        
-        private bool isMatchmaking;
+
         private bool isPlaying;
         private Coroutine matchmakingCoroutine = null;
 
@@ -42,7 +43,7 @@ namespace Idem
 
         public async Task<bool> StartMatchmaking(string gameMode, params string[] availableServers)
         {
-            if (isMatchmaking)
+            if (IsMatchmaking)
             {
                 Debug.LogWarning($"Trying to start matchmaking while already matchmaking");
                 return true;
@@ -56,17 +57,16 @@ namespace Idem
             
             try
             {
+                IsMatchmaking = true;
                 var response = await idemClient.StartMatchmaking(gameMode, availableServers);
-                if (!JsonUtil.TryParse<BaseResponse>(response, out var parsed))
-                    return false;
 
-                if (!parsed.success)
+                if (JsonUtil.TryParse<BaseResponse>(response, out var parsed) && !parsed.success)
                     Debug.LogError($"Error starting matchmaking: {parsed.error}");
 
-                isMatchmaking = parsed.success;
+                IsMatchmaking = parsed.success;
                 CurrentMatchInfo = null;
                 
-                if (isMatchmaking)
+                if (IsMatchmaking)
                 {
                     matchmakingCoroutine = coroutineService.StartCoroutine(MatchmakingCoroutine());
                 }
@@ -76,13 +76,14 @@ namespace Idem
             catch (Exception e)
             {
                 Debug.LogError($"Error starting matchmaking: {e.Message}");
+                IsMatchmaking = false;
                 return false;
             }
         }
 
         public async Task<bool> StopMatchmaking()
         {
-            if (!isMatchmaking)
+            if (!IsMatchmaking)
             {
                 Debug.LogWarning($"Trying to stop matchmaking while not matchmaking");
                 return true;
@@ -103,7 +104,7 @@ namespace Idem
                     matchmakingCoroutine = null;
                 }
 
-                isMatchmaking = !parsed.success;
+                IsMatchmaking = !parsed.success;
                 return parsed.success;
             }
             catch (Exception e)
@@ -167,19 +168,25 @@ namespace Idem
             finally
             {
                 isPlaying = false;
+                CurrentMatchInfo = null;
             }
         }
 
         private IEnumerator MatchmakingCoroutine()
         {
-            while (isMatchmaking || CurrentMatchInfo != null && !isPlaying)
+            var minWaitingTime = Time.realtimeSinceStartup + 5f;
+            while (Time.realtimeSinceStartup < minWaitingTime ||
+                IsMatchmaking || CurrentMatchInfo != null && !isPlaying)
             {
                 var response = idemClient.GetMatchmakingStatus();
-                yield return response;
+                while (!response.IsCompleted)
+                    yield return null;
+
+                Debug.Log($"MM state: {response.GetResult()}");
                 if (!response.IsFailed &&
                     JsonUtil.TryParse<MMStateResponse>(response.GetResult(), out var parsed))
                 {
-                    isMatchmaking = parsed.inQueue;
+                    IsMatchmaking = parsed.inQueue;
                     
                     if (parsed.matchReady && CurrentMatchInfo != null)
                     {
@@ -200,7 +207,7 @@ namespace Idem
                     }
                 }
 
-                yield return new WaitForSeconds(MatchmakingPollIntervalS);
+                yield return MatchmakingPollInterval;
             }
         }
 
@@ -213,6 +220,7 @@ namespace Idem
             }
             
             isPlaying = true;
+            IsMatchmaking = false;
             CurrentMatchInfo = CurrentMatchInfo.Value.Ready();
             OnMatchReady?.Invoke(CurrentMatchInfo.Value);
         }
@@ -226,7 +234,9 @@ namespace Idem
             }
 
             var response = idemClient.ConfirmMatch(CurrentMatchInfo.Value.matchId);
-            yield return response;
+            while (!response.IsCompleted)
+                yield return null;
+            
             if (response.IsFailed ||
                 !JsonUtil.TryParse<ConfirmMatchResponse>(response.GetResult(), out var parsed) ||
                 !parsed.canStartMatch)
