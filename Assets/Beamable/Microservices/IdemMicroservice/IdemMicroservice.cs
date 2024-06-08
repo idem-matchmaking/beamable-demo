@@ -32,8 +32,10 @@ namespace Beamable.Microservices
         private static Task<bool> connectionTask = null;
         private static IdemLogic logic = null;
         private static readonly List<string> gameModes = new();
+        private static DateTime lastInitStartedAt;
         
         // convenience
+        private static readonly TimeSpan InitRetryDelay = TimeSpan.FromSeconds(10);
         private string playerId => Context.UserId == 0 ? null : Context.UserId.ToString();
 
         [ClientCallable]
@@ -114,10 +116,7 @@ namespace Beamable.Microservices
                 return connectionError;
 
             var result = logic.GetMatchmakingStatus(playerId);
-            var response = result.ToJson();
-            if (debug)
-                Debug.Log($"GetMatchmakingStatus called for playerId {playerId}, response: {response}");
-            return response;
+            return result.ToJson();
         }
         
         [ClientCallable]
@@ -175,8 +174,13 @@ namespace Beamable.Microservices
         private async Task Initialize()
         {
             if (connectionTask != null)
-                return;
+            {
+                if (!connectionTask.IsCompleted || connectionTask.Result ||
+                    DateTime.Now - lastInitStartedAt < InitRetryDelay)
+                    return;
+            }
 
+            lastInitStartedAt = DateTime.Now;
             var connectionCompletion = new TaskCompletionSource<bool>();
                 
             try
@@ -250,7 +254,7 @@ namespace Beamable.Microservices
             }
             catch (Exception e)
             {
-                Debug.LogError($"Initialization exception: {e.Message}\n{e.StackTrace}");
+                Fail($"Initialization exception: {e.Message}\n{e.StackTrace}");
             }
 
             return;

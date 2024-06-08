@@ -5,6 +5,20 @@ namespace Beamable.Microservices.Idem.Shared
 {
     public static class JsonUtil
     {
+        public static bool TryParse<T>(string json, out T result)
+        {
+            try
+            {
+                result = CompactJson.Serializer.Parse<T>(json);
+                return true;
+            }
+            catch (Exception e)
+            {
+                result = default;
+                return false;
+            }
+        }
+        
         public static T Parse<T>(string json)
         {
             try

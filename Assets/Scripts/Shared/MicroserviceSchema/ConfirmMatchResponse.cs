@@ -5,7 +5,11 @@
         public static readonly ConfirmMatchResponse MatchConfirmed = new(true);
         public static readonly ConfirmMatchResponse MatchNotConfirmed = new(false);
         
-        public readonly bool canStartMatch;
+        public bool canStartMatch;
+        
+        public ConfirmMatchResponse()
+        {
+        }
         
         public ConfirmMatchResponse(bool canStartMatch) : base(true)
         {

@@ -4,6 +4,10 @@
     {
         public int teamId;
         public string playerId;
+        
+        public IdemPlayer()
+        {
+        }
 
         public IdemPlayer(int teamId, string playerId)
         {

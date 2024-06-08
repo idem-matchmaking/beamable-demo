@@ -12,6 +12,9 @@ namespace Beamable.Microservices.Idem.Shared.MicroserviceSchema
         public string matchId;
         public IdemPlayer[] players;
 
+        public MMStateResponse()
+        {
+        }
 
         public MMStateResponse(bool inQueue, bool matchFound, bool timeout, string gameMode = "", string matchId = "", IdemPlayer[] players = null) : base(true)
         {

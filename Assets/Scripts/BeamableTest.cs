@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Threading.Tasks;
 using Beamable;
 using Beamable.Microservices.Idem.Shared;
 using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
@@ -128,8 +127,14 @@ namespace DefaultNamespace
             await BeamContext.Default.OnReady;
             mmStatus = await idemClient.GetMatchmakingStatus();
             Debug.Log($"Got fresh MM status: {mmStatus}");
+            
+            if (JsonUtil.TryParse<MMStateResponse>(mmStatus, out var parsed) &&
+                !string.IsNullOrWhiteSpace(parsed.matchId))
+            {
+                UpdateMatchData(parsed);
+            }
         }
-        
+
         private async void UpdatePlayers()
         {
             var players = await idemClient.DebugGetPlayers(gameModeText);
@@ -155,12 +160,20 @@ namespace DefaultNamespace
             return parsed?.value ?? response;
         }
 
-        private object CreateDummyMatchResult()
+        private void UpdateMatchData(MMStateResponse parsed)
+        {
+            matchId = parsed.matchId;
+            gameModeText = parsed.gameMode;
+            matchResultJson = CreateDummyMatchResult(matchId, parsed.players[0].playerId, parsed.players[1].playerId)
+                .ToJson();
+        }
+
+        private object CreateDummyMatchResult(string matchId = "ENTER_MATCH_ID", string playerId1 = "ENTER_PLAYER_ID", string playerId2 = "ENTER_PLAYER_ID")
             => new IdemMatchResult
             {
                 server = "mainServer",
                 gameId = gameModeText,
-                matchId = "ENTER_MATCH_ID",
+                matchId = matchId,
                 gameLength = 100,
                 teams = new[]
                 {
@@ -171,7 +184,7 @@ namespace DefaultNamespace
                         {
                             new IdemPlayerResult
                             {
-                                playerId = "ENTER_PLAYER_ID",
+                                playerId = playerId1,
                                 score = 100
                             },
                         }
@@ -183,7 +196,7 @@ namespace DefaultNamespace
                         {
                             new IdemPlayerResult
                             {
-                                playerId = "ENTER_PLAYER_ID",
+                                playerId = playerId2,
                                 score = 50
                             },
                         }
