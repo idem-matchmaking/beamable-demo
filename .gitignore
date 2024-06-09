@@ -16,3 +16,5 @@ build
 Unity.Beamable.Customer.Common.csproj
 IdemService.csproj
 IdemServiceAsmdef.csproj
+buildMac.app
+buildMac.app.zip

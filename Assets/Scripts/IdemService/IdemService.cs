@@ -26,7 +26,7 @@ namespace Idem
          */
         public event Action<MatchInfo> OnMatchReady;
 
-        private readonly WaitForSeconds MatchmakingPollInterval = new (2f);
+        private readonly float MatchmakingPollIntervalS = 2f;
         private readonly BeamContext ctx;
         private readonly IdemMicroserviceClient idemClient;
         private readonly CoroutineService coroutineService;
@@ -57,6 +57,8 @@ namespace Idem
             
             try
             {
+                Reset();
+                
                 IsMatchmaking = true;
                 var response = await idemClient.StartMatchmaking(gameMode, availableServers);
 
@@ -64,7 +66,6 @@ namespace Idem
                     Debug.LogError($"Error starting matchmaking: {parsed.error}");
 
                 IsMatchmaking = parsed.success;
-                CurrentMatchInfo = null;
                 
                 if (IsMatchmaking)
                 {
@@ -104,7 +105,9 @@ namespace Idem
                     matchmakingCoroutine = null;
                 }
 
-                IsMatchmaking = !parsed.success;
+                if (parsed.success)
+                    Reset();
+                
                 return parsed.success;
             }
             catch (Exception e)
@@ -167,22 +170,33 @@ namespace Idem
             }
             finally
             {
-                isPlaying = false;
-                CurrentMatchInfo = null;
+                Reset();
             }
+        }
+
+        private void Reset()
+        {
+            isPlaying = false;
+            IsMatchmaking = false;
+            CurrentMatchInfo = null;
         }
 
         private IEnumerator MatchmakingCoroutine()
         {
             var minWaitingTime = Time.realtimeSinceStartup + 5f;
+            float lastRequestTime = Time.realtimeSinceStartup;
             while (Time.realtimeSinceStartup < minWaitingTime ||
                 IsMatchmaking || CurrentMatchInfo != null && !isPlaying)
             {
+                var timeLeftToWait = lastRequestTime + MatchmakingPollIntervalS - Time.realtimeSinceStartup;
+                yield return new WaitForSeconds(timeLeftToWait);
+
+                lastRequestTime = Time.realtimeSinceStartup;
                 var response = idemClient.GetMatchmakingStatus();
                 while (!response.IsCompleted)
                     yield return null;
 
-                Debug.Log($"MM state: {response.GetResult()}");
+                Debug.Log($"[{Time.realtimeSinceStartup:F}] MM state: {response.GetResult()}");
                 if (!response.IsFailed &&
                     JsonUtil.TryParse<MMStateResponse>(response.GetResult(), out var parsed))
                 {
@@ -206,8 +220,6 @@ namespace Idem
                         CurrentMatchInfo = null;
                     }
                 }
-
-                yield return MatchmakingPollInterval;
             }
         }
 

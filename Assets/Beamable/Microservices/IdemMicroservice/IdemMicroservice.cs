@@ -181,6 +181,12 @@ namespace Beamable.Microservices
                     return;
             }
 
+            if (Services.RealmConfig == null)
+            {
+                Debug.LogWarning($"Initialization attempt with null RealmConfig");
+                return;
+            }
+
             lastInitStartedAt = DateTime.Now;
             var connectionCompletion = new TaskCompletionSource<bool>();
                 
