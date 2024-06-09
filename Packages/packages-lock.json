@@ -215,6 +215,12 @@
       },
       "url": "https://packages.unity.com"
     },
+    "gg.idem.beamable.microservice": {
+      "version": "file:gg.idem.beamable.microservice@1.0.0",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.unity.modules.ai": {
       "version": "1.0.0",
       "depth": 0,
