@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "com.beamable": {
-      "version": "1.19.18",
+      "version": "1.19.20",
       "depth": 0,
       "source": "registry",
       "dependencies": {
@@ -15,11 +15,11 @@
       "url": "https://nexus.beamable.com/nexus/content/repositories/unity"
     },
     "com.beamable.server": {
-      "version": "1.19.18",
+      "version": "1.19.20",
       "depth": 0,
       "source": "registry",
       "dependencies": {
-        "com.beamable": "1.19.18"
+        "com.beamable": "1.19.20"
       },
       "url": "https://nexus.beamable.com/nexus/content/repositories/unity"
     },
@@ -216,10 +216,13 @@
       "url": "https://packages.unity.com"
     },
     "gg.idem.beamable.microservice": {
-      "version": "file:gg.idem.beamable.microservice@1.0.0",
+      "version": "https://github.com/idem-matchmaking/integration-beamable.git",
       "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
+      "source": "git",
+      "dependencies": {
+        "com.beamable.server": "1.19.20"
+      },
+      "hash": "de5b9d3225051515e96e8740a6b5eaa731795672"
     },
     "com.unity.modules.ai": {
       "version": "1.0.0",

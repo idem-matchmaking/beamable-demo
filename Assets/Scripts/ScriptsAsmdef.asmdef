@@ -1,0 +1,21 @@
+{
+    "name": "ScriptsAsmdef",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7e179f862393801489e043b5b4fcb29a",
+        "GUID:3af6ec96ce7e7b341a3339989e0d5730",
+        "GUID:592e3139386e61e4f8792b7a40ff6a62",
+        "GUID:e17286d323c5f4117923b68624a6c13c",
+        "GUID:8096aa2f7644d40f08b1fed854463288",
+        "GUID:3140025892ece41f1bca5bdb43c5b512"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
