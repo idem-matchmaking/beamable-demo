@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using Beamable;
 using Beamable.Microservices.Idem.Shared;
 using Beamable.Microservices.Idem.Shared.MicroserviceSchema;
@@ -15,9 +16,12 @@ namespace DefaultNamespace
         private string gameModeText = "1v1";
         private string serversText = "mainServer\nsecondServer";
         private string playerId = "";
+        private string protectedRequestsKey = "";
         private string matchId = "";
         private string mmStatus = "";
         private string matchResultJson = "";
+        private string backfillingDataJson = "";
+        private string backfillingRequestId = "";
         private bool isBeamableReady = false;
 
         private IdemMicroserviceClient idemClient => BeamContext.Default.Microservices().IdemMicroservice();
@@ -27,6 +31,7 @@ namespace DefaultNamespace
             InitBeamable();
             StartCoroutine(UpdateStatus());
             matchResultJson = CreateDummyMatchResult().ToJson();
+            backfillingDataJson = CreateDummyBackfillingData().ToJson();
         }
 
         private IEnumerator UpdateStatus()
@@ -69,23 +74,43 @@ namespace DefaultNamespace
             GUI.TextArea(new Rect(leftColumnX, 450, columnWidth, 100), mmStatus);
 
             GUI.Label(new Rect(leftColumnX, 550, columnWidth, 30), "Player id");
-            GUI.TextField(new Rect(leftColumnX, 600, columnWidth, 30), playerId);
+            playerId = GUI.TextField(new Rect(leftColumnX, 600, columnWidth, 30), playerId);
+            
+            GUI.Label(new Rect(leftColumnX, 650, columnWidth, 30), "Protected req key");
+            protectedRequestsKey = GUI.TextField(new Rect(leftColumnX, 700, columnWidth, 30), protectedRequestsKey);
+            
+            if (GUI.Button(new Rect(leftColumnX, 750, columnWidth, 30), "Delete save"))
+            {
+                PlayerPrefs.DeleteAll();
+            }
             
             // central column
             var centralColumnX = 450;
-            GUI.Label(new Rect(centralColumnX, 150, columnWidth, 30), "Match id");
-            matchId = GUI.TextArea(new Rect(centralColumnX, 200, columnWidth, 80), matchId);
+            GUI.Label(new Rect(centralColumnX, 50, columnWidth, 30), "Match id");
+            matchId = GUI.TextArea(new Rect(centralColumnX, 100, columnWidth, 80), matchId);
             
-            if (GUI.Button(new Rect(centralColumnX, 300, columnWidth, 30), "Confirm match"))
+            if (GUI.Button(new Rect(centralColumnX, 200, columnWidth, 30), "Confirm match"))
             {
                 idemClient.ConfirmMatch(matchId);
             }
             
-            GUI.Label(new Rect(centralColumnX, 350, columnWidth, 30), "Match result");
-            matchResultJson = GUI.TextArea(new Rect(centralColumnX, 400, columnWidth, 130), matchResultJson);
-            if (GUI.Button(new Rect(centralColumnX, 550, columnWidth, 30), "Complete match"))
+            GUI.Label(new Rect(centralColumnX, 250, columnWidth, 30), "Match result");
+            matchResultJson = GUI.TextArea(new Rect(centralColumnX, 300, columnWidth, 130), matchResultJson);
+            if (GUI.Button(new Rect(centralColumnX, 450, columnWidth, 30), "Complete match"))
             {
                 idemClient.CompleteMatch(matchResultJson);
+            }
+            
+            GUI.Label(new Rect(centralColumnX, 550, columnWidth, 30), "Backfilling request");
+            backfillingDataJson = GUI.TextArea(new Rect(centralColumnX, 600, columnWidth, 130), backfillingDataJson);
+            if (GUI.Button(new Rect(centralColumnX, 750, columnWidth, 30), "Backfilling request"))
+            {
+                idemClient.RequestBackfilling(backfillingDataJson, protectedRequestsKey);
+            }
+            
+            if (GUI.Button(new Rect(centralColumnX, 800, columnWidth, 30), "Cancel backfilling"))
+            {
+                idemClient.CancelBackfilling(matchId, backfillingRequestId, protectedRequestsKey);
             }
             
             // right column
@@ -166,6 +191,9 @@ namespace DefaultNamespace
             gameModeText = parsed.gameMode;
             matchResultJson = CreateDummyMatchResult(matchId, parsed.players[0].playerId, parsed.players[1].playerId)
                 .ToJson();
+            if (string.IsNullOrEmpty(backfillingRequestId))
+                backfillingRequestId = Guid.NewGuid().ToString();
+            backfillingDataJson = CreateDummyBackfillingData(matchId, backfillingRequestId, playerId).ToJson();
         }
 
         private object CreateDummyMatchResult(string matchId = "ENTER_MATCH_ID", string playerId1 = "ENTER_PLAYER_ID", string playerId2 = "ENTER_PLAYER_ID")
@@ -203,5 +231,8 @@ namespace DefaultNamespace
                     }
                 }
             };
+
+        private BackfillingData CreateDummyBackfillingData(string matchId = "ENTER_MATCH_ID", string backfillingRequestId = "ENTER_BACKFILLING_REQUEST_ID", string droppedPlayerId = "ENTER_PLAYER_ID")
+            => new (matchId, backfillingRequestId, droppedPlayerId, Array.Empty<ScoreData>());
     }
 }
