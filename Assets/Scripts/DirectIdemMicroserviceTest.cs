@@ -31,7 +31,8 @@ namespace DefaultNamespace
             InitBeamable();
             StartCoroutine(UpdateStatus());
             matchResultJson = CreateDummyMatchResult().ToJson();
-            backfillingDataJson = CreateDummyBackfillingData().ToJson();
+            backfillingDataJson = string.Empty;
+            // backfillingDataJson = CreateDummyBackfillingData().ToJson();
         }
 
         private IEnumerator UpdateStatus()
@@ -105,12 +106,12 @@ namespace DefaultNamespace
             backfillingDataJson = GUI.TextArea(new Rect(centralColumnX, 600, columnWidth, 130), backfillingDataJson);
             if (GUI.Button(new Rect(centralColumnX, 750, columnWidth, 30), "Backfilling request"))
             {
-                idemClient.RequestBackfilling(backfillingDataJson, protectedRequestsKey);
+                // idemClient.RequestBackfilling(backfillingDataJson, protectedRequestsKey);
             }
             
             if (GUI.Button(new Rect(centralColumnX, 800, columnWidth, 30), "Cancel backfilling"))
             {
-                idemClient.CancelBackfilling(matchId, backfillingRequestId, protectedRequestsKey);
+                // idemClient.CancelBackfilling(matchId, backfillingRequestId, protectedRequestsKey);
             }
             
             // right column
@@ -193,7 +194,8 @@ namespace DefaultNamespace
                 .ToJson();
             if (string.IsNullOrEmpty(backfillingRequestId))
                 backfillingRequestId = Guid.NewGuid().ToString();
-            backfillingDataJson = CreateDummyBackfillingData(matchId, backfillingRequestId, playerId).ToJson();
+            backfillingDataJson = string.Empty;
+            // backfillingDataJson = CreateDummyBackfillingData(matchId, backfillingRequestId, playerId).ToJson();
         }
 
         private object CreateDummyMatchResult(string matchId = "ENTER_MATCH_ID", string playerId1 = "ENTER_PLAYER_ID", string playerId2 = "ENTER_PLAYER_ID")
@@ -232,7 +234,8 @@ namespace DefaultNamespace
                 }
             };
 
-        private BackfillingData CreateDummyBackfillingData(string matchId = "ENTER_MATCH_ID", string backfillingRequestId = "ENTER_BACKFILLING_REQUEST_ID", string droppedPlayerId = "ENTER_PLAYER_ID")
-            => new (matchId, backfillingRequestId, droppedPlayerId, Array.Empty<ScoreData>());
+        // waits for the beta functionality to be moved to the main branch
+        // private BackfillingData CreateDummyBackfillingData(string matchId = "ENTER_MATCH_ID", string backfillingRequestId = "ENTER_BACKFILLING_REQUEST_ID", string droppedPlayerId = "ENTER_PLAYER_ID")
+        //     => new (matchId, backfillingRequestId, droppedPlayerId, Array.Empty<ScoreData>());
     }
 }
